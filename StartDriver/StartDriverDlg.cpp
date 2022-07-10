@@ -65,6 +65,7 @@ BEGIN_MESSAGE_MAP(CStartDriverDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_BTN_LOAD, &CStartDriverDlg::OnBnClickedBtnLoad)
 END_MESSAGE_MAP()
 
 
@@ -153,3 +154,12 @@ HCURSOR CStartDriverDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+
+
+
+
+
+void CStartDriverDlg::OnBnClickedBtnLoad()
+{
+	// TODO: 在此添加控件通知处理程序代码
+}

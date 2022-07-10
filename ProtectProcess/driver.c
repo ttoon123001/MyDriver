@@ -1,6 +1,6 @@
 #include <ntddk.h>   
 
-
+#define DEVICE_NAME L"\\device\\ntmodeldrv"
 #define LINK_NAME L"\\dosdevices\\ntmodeldrv" //等于\\??\\ntmodeldrv
 
 
@@ -27,9 +27,12 @@ NTSTATUS DriverEntry(
 )
 {	
 	int i;
+	UNICODE_STRING uDeviceName;
 	UNICODE_STRING uLinkName;
-
+	RtlInitUnicodeString(&uDeviceName, DEVICE_NAME);
 	RtlInitUnicodeString(&uLinkName, LINK_NAME);
+
+	IoCreateSymbolicLink(&uLinkName, &uDeviceName);  //为设备名创建一个符号链接
 
 	DbgPrint("Hello/n");
 
