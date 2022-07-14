@@ -8,11 +8,52 @@
 #include "StartDriverDlg.h"
 #include "afxdialogex.h"
 
+
 #include <Windows.h>
 #include <winsvc.h>
+#include <winioctl.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
+#endif
+
+
+
+//#define DRIVER_NAME "ntmodeldrv"
+//#define DRIVER_PATH ".\\ntmodeldrv.sys"
+
+#define IOCTRL_BASE 0x800
+
+#define MYIOCTRL_CODE(i) \
+	CTL_CODE(FILE_DEVICE_UNKNOWN, IOCTRL_BASE+i, METHOD_BUFFERED,FILE_ANY_ACCESS)
+
+#define CTL_HELLO MYIOCTRL_CODE(0)
+#define CTL_PRINT MYIOCTRL_CODE(1)
+#define CTL_BYE MYIOCTRL_CODE(2)
+
+
+
+
+
+#define IS_USE_OUTPUT_DEBUG_PRINT   1
+
+#if  IS_USE_OUTPUT_DEBUG_PRINT 
+
+#define  OUTPUT_DEBUG_PRINTF(str)  OutputDebugPrintf(str)
+void OutputDebugPrintf(const char * strOutputString, ...)
+{
+#define PUT_PUT_DEBUG_BUF_LEN   1024
+	char strBuffer[PUT_PUT_DEBUG_BUF_LEN] = { 0 };
+	va_list vlArgs;
+	va_start(vlArgs, strOutputString);
+	_vsnprintf_s(strBuffer, sizeof(strBuffer) - 1, strOutputString, vlArgs);  //_vsnprintf_s  _vsnprintf
+	//vsprintf(strBuffer,strOutputString,vlArgs);
+	va_end(vlArgs);
+	OutputDebugStringA(strBuffer);  //OutputDebugString    // OutputDebugStringW
+
+}
+#else 
+#define  OUTPUT_DEBUG_PRINTF(str) 
 #endif
 
 
@@ -70,6 +111,7 @@ BEGIN_MESSAGE_MAP(CStartDriverDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_LOAD, &CStartDriverDlg::OnBnClickedBtnLoad)
 	ON_BN_CLICKED(IDC_BTN_UNLOAD, &CStartDriverDlg::OnBnClickedBtnUnload)
+	ON_BN_CLICKED(IDC_BTN_TEST, &CStartDriverDlg::OnBnClickedBtnTest)
 END_MESSAGE_MAP()
 
 
@@ -168,7 +210,6 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 	WCHAR szDriverImagePath[256] = { 0 };
 	//得到完整的驱动路径
 	GetFullPathName(lpszDriverPath, 256, szDriverImagePath, NULL);
-
 	BOOL bRet = FALSE;
 
 	SC_HANDLE hServiceMgr = NULL;//SCM管理器的句柄
@@ -180,14 +221,15 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 	if (hServiceMgr == NULL)
 	{
 		//OpenSCManager失败
-		printf("OpenSCManager() Failed %d ! \n", GetLastError());
+
+		OutputDebugPrintf("OpenSCManager() Failed %d ! \n", GetLastError());
 		bRet = FALSE;
 		goto BeforeLeave;
 	}
 	else
 	{
 		////OpenSCManager成功
-		printf("OpenSCManager() ok ! \n");
+		OutputDebugPrintf("OpenSCManager() ok ! \n");
 	}
 
 	//创建驱动所对应的服务
@@ -213,14 +255,14 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 		if (dwRtn != ERROR_IO_PENDING && dwRtn != ERROR_SERVICE_EXISTS)
 		{
 			//由于其他原因创建服务失败
-			printf("CrateService() Failed %d ! \n", dwRtn);
+			OutputDebugPrintf("CrateService() Failed %d ! \n", dwRtn);
 			bRet = FALSE;
 			goto BeforeLeave;
 		}
 		else
 		{
 			//服务创建失败，是由于服务已经创立过
-			printf("CrateService() Failed Service is ERROR_IO_PENDING or ERROR_SERVICE_EXISTS! \n");
+			OutputDebugString(L"CrateService() Failed Service is ERROR_IO_PENDING or ERROR_SERVICE_EXISTS! \n");
 		}
 
 		// 驱动程序已经加载，只需要打开  
@@ -229,18 +271,18 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 		{
 			//如果打开服务也失败，则意味错误
 			dwRtn = GetLastError();
-			printf("OpenService() Failed %d ! \n", dwRtn);
+			OutputDebugPrintf("OpenService() Failed %d ! \n", dwRtn);
 			bRet = FALSE;
 			goto BeforeLeave;
 		}
 		else
 		{
-			printf("OpenService() ok ! \n");
+			OutputDebugPrintf("OpenService() ok ! \n");
 		}
 	}
 	else
 	{
-		printf("CrateService() ok ! \n");
+		OutputDebugPrintf("CrateService() ok ! \n");
 	}
 
 	//开启此项服务
@@ -250,7 +292,7 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 		DWORD dwRtn = GetLastError();
 		if (dwRtn != ERROR_IO_PENDING && dwRtn != ERROR_SERVICE_ALREADY_RUNNING)
 		{
-			printf("StartService() Failed %d ! \n", dwRtn);
+			OutputDebugPrintf("StartService() Failed %d ! \n" ,dwRtn);
 			bRet = FALSE;
 			goto BeforeLeave;
 		}
@@ -259,14 +301,14 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 			if (dwRtn == ERROR_IO_PENDING)
 			{
 				//设备被挂住
-				printf("StartService() Failed ERROR_IO_PENDING ! \n");
+				OutputDebugPrintf("StartService() Failed ERROR_IO_PENDING ! \n");
 				bRet = FALSE;
 				goto BeforeLeave;
 			}
 			else
 			{
 				//服务已经开启
-				printf("StartService() Failed ERROR_SERVICE_ALREADY_RUNNING ! \n");
+				OutputDebugPrintf("StartService() Failed ERROR_SERVICE_ALREADY_RUNNING ! \n");
 				bRet = TRUE;
 				goto BeforeLeave;
 			}
@@ -299,14 +341,14 @@ BOOL UnloadDriver(CString szSvrName)
 	if (hServiceMgr == NULL)
 	{
 		//带开SCM管理器失败
-		printf("OpenSCManager() Failed %d ! \n", GetLastError());
+		OutputDebugPrintf("OpenSCManager() Failed %d ! \n", GetLastError());
 		bRet = FALSE;
 		goto BeforeLeave;
 	}
 	else
 	{
 		//带开SCM管理器失败成功
-		printf("OpenSCManager() ok ! \n");
+		OutputDebugPrintf("OpenSCManager() ok ! \n");
 	}
 	//打开驱动所对应的服务
 	hServiceDDK = OpenService(hServiceMgr, szSvrName, SERVICE_ALL_ACCESS);
@@ -314,23 +356,23 @@ BOOL UnloadDriver(CString szSvrName)
 	if (hServiceDDK == NULL)
 	{
 		//打开驱动所对应的服务失败
-		printf("OpenService() Failed %d ! \n", GetLastError());
+		OutputDebugPrintf("OpenService() Failed %d ! \n" ,GetLastError());
 		bRet = FALSE;
 		goto BeforeLeave;
 	}
 	else
 	{
-		printf("OpenService() ok ! \n");
+		OutputDebugString(L"OpenService() ok ! \n");
 	}
 	//停止驱动程序，如果停止失败，只有重新启动才能，再动态加载。  
 	if (!ControlService(hServiceDDK, SERVICE_CONTROL_STOP, &SvrSta))
 	{
-		printf("ControlService() Failed %d !\n", GetLastError());
+		OutputDebugPrintf("ControlService() Failed %d !\n", GetLastError());
 	}
 	else
 	{
 		//打开驱动所对应的失败
-		printf("ControlService() ok !\n");
+		OutputDebugPrintf("ControlService() ok !\n");
 	}
 
 
@@ -339,12 +381,12 @@ BOOL UnloadDriver(CString szSvrName)
 	if (!DeleteService(hServiceDDK))
 	{
 		//卸载失败
-		printf("DeleteSrevice() Failed %d !\n", GetLastError());
+		OutputDebugPrintf("DeleteSrevice() Failed %d !\n", GetLastError());
 	}
 	else
 	{
 		//卸载成功
-		printf("DelServer:deleteSrevice() ok !\n");
+		OutputDebugPrintf("DelServer:deleteSrevice() ok !\n");
 	}
 
 	bRet = TRUE;
@@ -362,6 +404,85 @@ BeforeLeave:
 }
 
 
+void TestDriver()
+{
+	//测试驱动程序  
+	HANDLE hDevice = CreateFile(L"\\\\.\\ProtectProcess",
+		GENERIC_WRITE | GENERIC_READ,
+		0,
+		NULL,
+		OPEN_EXISTING,
+		0,
+		NULL);
+	if (hDevice != INVALID_HANDLE_VALUE)
+	{
+		OutputDebugPrintf("Create Device ok ! \n");
+	}
+	else
+	{
+		OutputDebugPrintf("Create Device Failed %d ! \n", GetLastError());
+		return;
+	}
+	CHAR bufRead[1024] = { 0 };
+	WCHAR bufWrite[1024] = L"Hello, world";
+
+	DWORD dwRead = 0;
+	DWORD dwWrite = 0;
+
+	ReadFile(hDevice, bufRead, 1024, &dwRead, NULL);
+	OutputDebugString(L"Read done!:%ws\n");
+	OutputDebugString(L"Please press any key to write\n");
+	MessageBox(0,0,0,0);
+	WriteFile(hDevice, bufWrite, (wcslen(bufWrite) + 1) * sizeof(WCHAR), &dwWrite, NULL);
+
+	OutputDebugString(L"Write done!\n");
+
+	OutputDebugString(L"Please press any key to deviceiocontrol\n");
+	MessageBox(0, 0, 0, 0);
+	CHAR bufInput[1024] = "Hello, world";
+	CHAR bufOutput[1024] = { 0 };
+	DWORD dwRet = 0;
+
+	WCHAR bufFileInput[1024] = L"c:\\docs\\hi.txt";
+
+	OutputDebugString(L"Please press any key to send PRINT\n");
+	MessageBox(0, 0, 0, 0);
+	DeviceIoControl(hDevice,
+		CTL_PRINT,
+		bufFileInput,
+		sizeof(bufFileInput),
+		bufOutput,
+		sizeof(bufOutput),
+		&dwRet,
+		NULL);
+	OutputDebugString(L"Please press any key to send HELLO\n");
+	MessageBox(0, 0, 0, 0);
+	DeviceIoControl(hDevice,
+		CTL_HELLO,
+		NULL,
+		0,
+		NULL,
+		0,
+		&dwRet,
+		NULL);
+	OutputDebugString(L"Please press any key to send BYE\n");
+	MessageBox(0, 0, 0, 0);
+	DeviceIoControl(hDevice,
+		CTL_BYE,
+		NULL,
+		0,
+		NULL,
+		0,
+		&dwRet,
+		NULL);
+	OutputDebugString(L"DeviceIoControl done!\n");
+	CloseHandle(hDevice);
+}
+
+
+
+
+
 void CStartDriverDlg::OnBnClickedBtnLoad()
 {
 	// TODO: 在此添加控件通知处理程序代码
@@ -369,8 +490,7 @@ void CStartDriverDlg::OnBnClickedBtnLoad()
 	CString csFileName;
 	GetCurrentDirectory(MAX_PATH, pFileName);
 	csFileName.Format(L"%s%s", pFileName, L"\\ProtectProcess.sys");
-	
-	LoadDriver(L"ProtectProcess", pFileName);
+	LoadDriver(L"ProtectProcess", csFileName);
 }
 
 
@@ -378,4 +498,13 @@ void CStartDriverDlg::OnBnClickedBtnUnload()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	UnloadDriver(L"ProtectProcess");
+}
+
+
+void CStartDriverDlg::OnBnClickedBtnTest()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	TestDriver();
+
 }
