@@ -103,6 +103,7 @@ CStartDriverDlg::CStartDriverDlg(CWnd* pParent /*=nullptr*/)
 void CStartDriverDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_LIST_PROC, m_listctrl_proc);
 }
 
 BEGIN_MESSAGE_MAP(CStartDriverDlg, CDialogEx)
@@ -148,6 +149,16 @@ BOOL CStartDriverDlg::OnInitDialog()
 
 	// TODO: 在此添加额外的初始化代码
 
+	m_listctrl_proc.InsertColumn(0, L"进程名");
+	m_listctrl_proc.InsertColumn(1, L"PID");
+	m_listctrl_proc.InsertColumn(2, L"路径");
+
+	m_listctrl_proc.SetColumnWidth(0, 120);
+	m_listctrl_proc.SetColumnWidth(1, 80);
+	m_listctrl_proc.SetColumnWidth(2, 200);
+
+
+	m_listctrl_proc.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -237,7 +248,7 @@ BOOL LoadDriver(CString lpszDriverName, CString lpszDriverPath)
 		lpszDriverName, //驱动程序的在注册表中的名字  
 		lpszDriverName, // 注册表驱动程序的 DisplayName 值  
 		SERVICE_ALL_ACCESS, // 加载驱动程序的访问权限  
-		SERVICE_KERNEL_DRIVER,// 表示加载的服务是驱动程序  
+		SERVICE_FILE_SYSTEM_DRIVER,// 表示加载的服务是驱动程序  
 		SERVICE_DEMAND_START, // 注册表驱动程序的 Start 值  
 		SERVICE_ERROR_IGNORE, // 注册表驱动程序的 ErrorControl 值  
 		szDriverImagePath, // 注册表驱动程序的 ImagePath 值  
@@ -407,7 +418,7 @@ BeforeLeave:
 void TestDriver()
 {
 	//测试驱动程序  
-	HANDLE hDevice = CreateFile(L"\\\\.\\ProtectProcess",
+	HANDLE hDevice = CreateFile(L"\\\\.\\ProtectProcess_001",
 		GENERIC_WRITE | GENERIC_READ,
 		0,
 		NULL,
@@ -428,17 +439,17 @@ void TestDriver()
 
 	DWORD dwRead = 0;
 	DWORD dwWrite = 0;
-
+	MessageBox(0, L"Read", 0, 0);
 	ReadFile(hDevice, bufRead, 1024, &dwRead, NULL);
 	OutputDebugString(L"Read done!:%ws\n");
 	OutputDebugString(L"Please press any key to write\n");
-	MessageBox(0,0,0,0);
+	MessageBox(0,L"Write",0,0);
 	WriteFile(hDevice, bufWrite, (wcslen(bufWrite) + 1) * sizeof(WCHAR), &dwWrite, NULL);
 
 	OutputDebugString(L"Write done!\n");
 
 	OutputDebugString(L"Please press any key to deviceiocontrol\n");
-	MessageBox(0, 0, 0, 0);
+	
 	CHAR bufInput[1024] = "Hello, world";
 	CHAR bufOutput[1024] = { 0 };
 	DWORD dwRet = 0;
@@ -446,7 +457,7 @@ void TestDriver()
 	WCHAR bufFileInput[1024] = L"c:\\docs\\hi.txt";
 
 	OutputDebugString(L"Please press any key to send PRINT\n");
-	MessageBox(0, 0, 0, 0);
+	MessageBox(0, L"PRINT", 0, 0);
 	DeviceIoControl(hDevice,
 		CTL_PRINT,
 		bufFileInput,
@@ -456,7 +467,7 @@ void TestDriver()
 		&dwRet,
 		NULL);
 	OutputDebugString(L"Please press any key to send HELLO\n");
-	MessageBox(0, 0, 0, 0);
+	MessageBox(0, L"HELLO", 0, 0);
 	DeviceIoControl(hDevice,
 		CTL_HELLO,
 		NULL,
@@ -466,7 +477,7 @@ void TestDriver()
 		&dwRet,
 		NULL);
 	OutputDebugString(L"Please press any key to send BYE\n");
-	MessageBox(0, 0, 0, 0);
+	MessageBox(0, L"BYE", 0, 0);
 	DeviceIoControl(hDevice,
 		CTL_BYE,
 		NULL,
