@@ -96,6 +96,7 @@ END_MESSAGE_MAP()
 
 CStartDriverDlg::CStartDriverDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_STARTDRIVER_DIALOG, pParent)
+	, m_csPid(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -104,6 +105,7 @@ void CStartDriverDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_LIST_PROC, m_listctrl_proc);
+	DDX_Text(pDX, IDC_EDIT_PID, m_csPid);
 }
 
 BEGIN_MESSAGE_MAP(CStartDriverDlg, CDialogEx)
@@ -113,6 +115,7 @@ BEGIN_MESSAGE_MAP(CStartDriverDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_LOAD, &CStartDriverDlg::OnBnClickedBtnLoad)
 	ON_BN_CLICKED(IDC_BTN_UNLOAD, &CStartDriverDlg::OnBnClickedBtnUnload)
 	ON_BN_CLICKED(IDC_BTN_TEST, &CStartDriverDlg::OnBnClickedBtnTest)
+	ON_BN_CLICKED(IDC_BTN_PROCTECT, &CStartDriverDlg::OnBnClickedBtnProctect)
 END_MESSAGE_MAP()
 
 
@@ -415,6 +418,31 @@ BeforeLeave:
 }
 
 
+BOOLEAN ConnectDriver(PHANDLE OUT pDevice)
+{
+	//测试驱动程序  
+	HANDLE hDevice = CreateFile(L"\\\\.\\ProtectProcess_001",
+		GENERIC_WRITE | GENERIC_READ,
+		0,
+		NULL,
+		OPEN_EXISTING,
+		0,
+		NULL);
+	if (hDevice != INVALID_HANDLE_VALUE)
+	{
+		OutputDebugPrintf("Create Device ok ! \n");
+	}
+	else
+	{
+		OutputDebugPrintf("Create Device Failed %d ! \n", GetLastError());
+		return FALSE;
+	}
+	*pDevice = hDevice;
+
+	return TRUE;
+}
+
+
 void TestDriver()
 {
 	//测试驱动程序  
@@ -492,6 +520,24 @@ void TestDriver()
 
 
 
+DWORD DrvSend(HANDLE hDevice, VOID* Buffer,ULONG length)
+{
+	DWORD dwWrite = 0;
+
+	WriteFile(hDevice, Buffer, length, &dwWrite, NULL);
+
+	return dwWrite;
+}
+
+DWORD DrvRecv(HANDLE hDevice, VOID* Buffer, ULONG length)
+{
+	DWORD dwRead = 0;
+
+	ReadFile(hDevice, Buffer, length, &dwRead, NULL);
+
+	return dwRead;
+}
+
 
 
 void CStartDriverDlg::OnBnClickedBtnLoad()
@@ -516,6 +562,20 @@ void CStartDriverDlg::OnBnClickedBtnTest()
 {
 	// TODO: 在此添加控件通知处理程序代码
 
-	TestDriver();
+	//TestDriver();
+	ConnectDriver(&m_hDevice);
 
+}
+
+
+
+
+void CStartDriverDlg::OnBnClickedBtnProctect()
+{
+	// TODO: 传PID到R0保护目标进程
+	UpdateData(TRUE);
+	ULONG pid = _ttoi(m_csPid);
+	MessageBox(m_csPid);
+
+	DrvSend(m_hDevice, &pid, sizeof(ULONG));
 }

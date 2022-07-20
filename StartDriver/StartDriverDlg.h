@@ -36,4 +36,7 @@ public:
 	afx_msg void OnBnClickedBtnUnload();
 	afx_msg void OnBnClickedBtnTest();
 	CListCtrl m_listctrl_proc;
+	afx_msg void OnBnClickedBtnProctect();
+	CString m_csPid;
+	HANDLE m_hDevice;
 };

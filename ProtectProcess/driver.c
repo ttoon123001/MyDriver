@@ -20,6 +20,53 @@
 
 PVOID pRegistrationHandle;
 
+NTKERNELAPI
+UCHAR * PsGetProcessImageFileName(__in PEPROCESS Process);
+
+BOOLEAN BypassCheckSign(PDRIVER_OBJECT pDriverObject)
+{
+#ifdef _WIN64
+	typedef struct _KLDR_DATA_TABLE_ENTRY
+	{
+		LIST_ENTRY listEntry;
+		ULONG64 __Undefined1;
+		ULONG64 __Undefined2;
+		ULONG64 __Undefined3;
+		ULONG64 NonPagedDebugInfo;
+		ULONG64 DllBase;
+		ULONG64 EntryPoint;
+		ULONG SizeOfImage;
+		UNICODE_STRING path;
+		UNICODE_STRING name;
+		ULONG   Flags;
+		USHORT  LoadCount;
+		USHORT  __Undefined5;
+		ULONG64 __Undefined6;
+		ULONG   CheckSum;
+		ULONG   __padding1;
+		ULONG   TimeDateStamp;
+		ULONG   __padding2;
+	} KLDR_DATA_TABLE_ENTRY, *PKLDR_DATA_TABLE_ENTRY;
+#else
+	typedef struct _KLDR_DATA_TABLE_ENTRY
+	{
+		LIST_ENTRY listEntry;
+		ULONG unknown1;
+		ULONG unknown2;
+		ULONG unknown3;
+		ULONG unknown4;
+		ULONG unknown5;
+		ULONG unknown6;
+		ULONG unknown7;
+		UNICODE_STRING path;
+		UNICODE_STRING name;
+		ULONG   Flags;
+	} KLDR_DATA_TABLE_ENTRY, *PKLDR_DATA_TABLE_ENTRY;
+#endif
+	PKLDR_DATA_TABLE_ENTRY pLdrData = (PKLDR_DATA_TABLE_ENTRY)pDriverObject->DriverSection;
+	pLdrData->Flags = pLdrData->Flags | 0x20;
+	return TRUE;
+}
 
 
 VOID Unload(IN PDRIVER_OBJECT pDriverObject)
@@ -141,6 +188,18 @@ return STATUS_SUCCESS;  //IO管理器接收完成状态
 }
 
 
+ VOID AddProtected(HANDLE Pid)
+ {
+
+ }
+
+ BOOLEAN IsProtected(HANDLE Pid)
+ {
+	 
+
+
+	 return TRUE;
+ }
 
 
  OB_PREOP_CALLBACK_STATUS
@@ -157,24 +216,30 @@ return STATUS_SUCCESS;  //IO管理器接收完成状态
 	 else
 	 {
 		 //用户层
-		   //用户层下所有OpenProcess,NtOpenProcess调用者的进程名获取
-		 //const char*进程名 = PsGetProcessImageFileName(PsGetCurrentProcess());//16个有效字符串
-		 //获得目标进程Pid，然后获得进程名
-		 //HANDLE pid = PsGetProcessId((PEPROCESS)OperationInformation->Object);
-		 //const char*目标进程名 = GetProcessName(pid);
-		 //KdPrint(("yjx:SYS 进程名=%s\n", 进程名));
-
-		 //保存与修改权限
-		 ACCESS_MASK old权限 = OperationInformation->Parameters->CreateHandleInformation.OriginalDesiredAccess;
-		 ACCESS_MASK old1 = old权限;
-		 ACCESS_MASK new1 = OperationInformation->Parameters->CreateHandleInformation.DesiredAccess;
-		 //排除 PROCESS_VM_READ 权限
-		 old权限 &= ~PROCESS_VM_READ;
-		 //排除掉 PROCESS_VM_WRITE
-		 old权限 &= ~PROCESS_VM_WRITE;
-		 //返回我们修改过的权限 OpenProcess
-		 OperationInformation->Parameters->CreateHandleInformation.DesiredAccess = old权限;
-		 DbgPrint("yjx:old权限=%x 新权限=%X", old权限, new1);
+		 
+		 HANDLE src_pid = PsGetCurrentProcessId();
+		 HANDLE dst_pid = PsGetProcessId((PEPROCESS)OperationInformation->Object);
+		 if (dst_pid == 0x9b8)
+		 {
+			 //用户层下所有OpenProcess,NtOpenProcess调用者的进程名获取
+			//const char*进程名 = PsGetProcessImageFileName(PsGetCurrentProcess());//16个有效字符串
+			//获得目标进程Pid，然后获得进程名
+			//HANDLE pid = PsGetProcessId((PEPROCESS)OperationInformation->Object);
+			//const char*目标进程名 = GetProcessName(pid);
+			 //KdPrint(("yjx:SYS 进程名=%s\n", PsGetProcessImageFileName(src_pid)));
+			 //KdPrint(("yjx:SYS 目标进程名=%s\n", PsGetProcessImageFileName(dst_pid)));
+			 //保存与修改权限
+			 ACCESS_MASK old权限 = OperationInformation->Parameters->CreateHandleInformation.OriginalDesiredAccess;
+			 ACCESS_MASK old1 = old权限;
+			 ACCESS_MASK new1 = OperationInformation->Parameters->CreateHandleInformation.DesiredAccess;
+			 //排除 PROCESS_VM_READ 权限
+			 old权限 &= ~PROCESS_VM_READ;
+			 //排除掉 PROCESS_VM_WRITE
+			 old权限 &= ~PROCESS_VM_WRITE;
+			 //返回我们修改过的权限 OpenProcess
+			 OperationInformation->Parameters->CreateHandleInformation.DesiredAccess = old权限;
+			 DbgPrint("yjx:call_pid=%d dest_pid=%d old权限=%x 新权限=%X", src_pid, dst_pid, old权限, new1);
+		 }
 
 	 }
 
@@ -188,11 +253,12 @@ NTSTATUS DriverEntry(
 )
 {	
 	int i;
+	NTSTATUS status = STATUS_SUCCESS;
 	PDEVICE_OBJECT pDeviceObject;
 	UNICODE_STRING uDeviceName;
 	UNICODE_STRING uLinkName;
 
-
+	PVOID pDriverSection = NULL;
 
 	OB_OPERATION_REGISTRATION oor;
 	OB_CALLBACK_REGISTRATION ocr;
@@ -222,6 +288,9 @@ NTSTATUS DriverEntry(
 	//pDevExt->pDevice = pDevObj;
 	//pDevExt->ustrDeviceName = devName;
 
+	
+
+
 	IoCreateSymbolicLink(&uLinkName, &uDeviceName);  //为设备名创建一个符号链接
 
 	DbgPrint("Hello/n");
@@ -237,6 +306,7 @@ NTSTATUS DriverEntry(
 
 	pDriverObject->DriverUnload = Unload;
 
+	BypassCheckSign(pDriverObject);
 
 	//设置监听的对象类型
 	oor.ObjectType = PsProcessType;
@@ -249,7 +319,11 @@ NTSTATUS DriverEntry(
 	ocr.OperationRegistrationCount = 1;
 	ocr.OperationRegistration = &oor;
 	RtlInitUnicodeString(&ocr.Altitude, L"321000"); // 设置加载顺序
-	ObRegisterCallbacks(&ocr, &pRegistrationHandle);
+	status = ObRegisterCallbacks(&ocr, &pRegistrationHandle);
+	if (!NT_SUCCESS(status))
+	{
+		DbgPrint("ObRegisterCallbacks Error 0x%X\r\n", status);
+	}
 
 
 
