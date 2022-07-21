@@ -18,10 +18,47 @@
 #define PROCESS_VM_WRITE                   (0x0020) 
 
 
+//外部引用
+extern PSHORT NtBuildNumber;
+
+ULONG HandleTab[256] = { 0 };
+
 PVOID pRegistrationHandle;
 
 NTKERNELAPI
 UCHAR * PsGetProcessImageFileName(__in PEPROCESS Process);
+
+
+
+ULONG AddProtected(HANDLE Pid)
+{
+	DbgPrint("yjx:sys HANDLE=%X ", Pid);
+	ULONG i = 0;
+	for (i; i < 256; i++)
+	{
+		if (HandleTab[i] == 0)
+		{
+			HandleTab[i] = Pid;
+			break;
+		}
+	}
+	return i;
+}
+
+BOOLEAN IsProtected(HANDLE Pid)
+{
+	ULONG i = 0;
+	for (i; i < 256; i++)
+	{
+		if (HandleTab[i] != 0)
+		{
+			if (HandleTab[i] == Pid)
+				return TRUE;
+		 }
+	 }
+
+	return FALSE;
+ }
 
 BOOLEAN BypassCheckSign(PDRIVER_OBJECT pDriverObject)
 {
@@ -141,6 +178,9 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT pObject, PIRP pIrp)  //共用分发函数
 	}
 	memset(pBuffer, 0, uWriteLength);
 	RtlCopyMemory(pBuffer, pWriteBuff, uWriteLength); //写内存
+
+	AddProtected(*(HANDLE*)pBuffer);
+
 	ExFreePool(pBuffer); //释放内存
 	pBuffer = NULL;
 
@@ -188,18 +228,6 @@ return STATUS_SUCCESS;  //IO管理器接收完成状态
 }
 
 
- VOID AddProtected(HANDLE Pid)
- {
-
- }
-
- BOOLEAN IsProtected(HANDLE Pid)
- {
-	 
-
-
-	 return TRUE;
- }
 
 
  OB_PREOP_CALLBACK_STATUS
@@ -208,7 +236,7 @@ return STATUS_SUCCESS;  //IO管理器接收完成状态
 		 POB_PRE_OPERATION_INFORMATION OperationInformation
 	 )
  {
-	 DbgPrint("yjx:sys pEPROCESS=%p ", OperationInformation->Object);
+	 
 	 if (OperationInformation->KernelHandle)
 	 {
 		 //内核创建
@@ -219,8 +247,10 @@ return STATUS_SUCCESS;  //IO管理器接收完成状态
 		 
 		 HANDLE src_pid = PsGetCurrentProcessId();
 		 HANDLE dst_pid = PsGetProcessId((PEPROCESS)OperationInformation->Object);
-		 if (dst_pid == 0x9b8)
+		 
+		 if (IsProtected(dst_pid))
 		 {
+			 DbgPrint("yjx:sys pEPROCESS=%p ", OperationInformation->Object);
 			 //用户层下所有OpenProcess,NtOpenProcess调用者的进程名获取
 			//const char*进程名 = PsGetProcessImageFileName(PsGetCurrentProcess());//16个有效字符串
 			//获得目标进程Pid，然后获得进程名
@@ -244,6 +274,99 @@ return STATUS_SUCCESS;  //IO管理器接收完成状态
 	 }
 
 	 return OB_PREOP_SUCCESS;
+ };
+
+
+ ///////////////////////遍历Object钩子////////////////////////////////
+ BOOLEAN GetVerCallbackOffset(PULONG ObjectCallbackListOffset)
+ {
+	 BOOLEAN ret = FALSE;
+	 switch (*NtBuildNumber)
+	 {
+	 case 7600:
+	 case 7601:
+	 {
+		 *ObjectCallbackListOffset = 0xC0;//win7
+		 ret = TRUE;
+		 break;
+	 }
+	 case 9200:
+	 {
+		 *ObjectCallbackListOffset = 0xC8;	//OBJECT_TYPE.CallbackList
+		 ret = TRUE;
+		 break;
+	 }
+	 case 9600:
+	 {
+		 *ObjectCallbackListOffset = 0xC8;	//OBJECT_TYPE.CallbackList
+		 ret = TRUE;
+		 break;
+	 }
+	 default:
+		 if (*NtBuildNumber > 10000)
+		 {
+			 *ObjectCallbackListOffset = 0xC8;
+			 ret = TRUE;
+		 }
+		 break;
+	 }
+	 return ret;
+ }
+ ULONG EnumObRegisterCallBacks()
+ {
+	 LONG ObjectCallBackListOffset;
+	 //计算当前版本CallBackList偏移
+	 GetVerCallbackOffset(&ObjectCallBackListOffset);
+	 //得到CallBackList链表
+	  //= PsProcessType + ObjectCallBackListOffset;
+	 //开始遍历
+
+	 //回调函数转为驱动模块名
+
+	 return 0;
+ }
+
+
+ ///////////////////////过掉Object钩子////////////////////////////////
+ PVOID       g_UpperHandle = NULL;
+ //回调函数
+ OB_PREOP_CALLBACK_STATUS MaxCallBack(IN PVOID RegistrationContext, IN POB_PRE_OPERATION_INFORMATION OperationInformation)
+ {
+	
+ 
+ }
+ OB_PREOP_CALLBACK_STATUS MinCallBack(IN PVOID RegistrationContext, IN POB_PRE_OPERATION_INFORMATION OperationInformation)
+ {
+ }
+
+ //回调基本信息,数组
+ OB_OPERATION_REGISTRATION ObUpperOperationRegistration[] =
+ {
+	 {NULL, OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE, MaxCallBack, NULL},  //进程的
+	 {NULL, OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE, MaxCallBack, NULL},  //线程的
+ };
+ OB_OPERATION_REGISTRATION ObLowerOperationRegistration[] =
+ {
+	 {NULL, OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE, MinCallBack, NULL},  //进程的
+	 {NULL, OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE, MinCallBack, NULL},  //线程的
+ };
+
+ //回调注册信息
+ OB_CALLBACK_REGISTRATION UpperCallbackRegistration =
+ {
+	 OB_FLT_REGISTRATION_VERSION,
+	 2,
+	 RTL_CONSTANT_STRING(L"880000"),//高的
+	 NULL,
+	 ObUpperOperationRegistration
+ }; 
+ OB_CALLBACK_REGISTRATION LowerCallbackRegistration =
+ {
+	 OB_FLT_REGISTRATION_VERSION,
+	 2,
+	 RTL_CONSTANT_STRING(L"880000"),//高的
+	 NULL,
+	 ObLowerOperationRegistration
  };
 
 
@@ -326,8 +449,30 @@ NTSTATUS DriverEntry(
 	}
 
 
+	//遍历Object钩子
+	ObUpperOperationRegistration[0].ObjectType = PsProcessType;
+	ObUpperOperationRegistration[0].Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
+	ObUpperOperationRegistration[1].ObjectType = PsThreadType;
+	ObUpperOperationRegistration[1].Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
+
+	status = ObRegisterCallbacks(&UpperCallbackRegistration, g_UpperHandle);
+	if (!NT_SUCCESS(status))
+	{
+		g_UpperHandle = NULL;
+		DbgPrint("ObRegisterCallbacks(UpperCallbackRegistration) Error 0x%X\r\n", status);
+	}
+	ObLowerOperationRegistration[0].ObjectType = PsProcessType;
+	ObLowerOperationRegistration[0].Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
+	ObLowerOperationRegistration[1].ObjectType = PsThreadType;
+	ObLowerOperationRegistration[1].Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
+	status = ObRegisterCallbacks(&LowerCallbackRegistration, g_UpperHandle);
+	if (!NT_SUCCESS(status))
+	{
+		g_UpperHandle = NULL;
+		DbgPrint("ObRegisterCallbacks(LowerCallcackRegistration) Error 0x%X\r\n", status);
+	}
 
 
 	return STATUS_SUCCESS;
 }
-	
+

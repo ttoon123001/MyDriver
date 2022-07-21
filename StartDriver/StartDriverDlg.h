@@ -39,4 +39,9 @@ public:
 	afx_msg void OnBnClickedBtnProctect();
 	CString m_csPid;
 	HANDLE m_hDevice;
+	afx_msg void OnBnClickedBtnConnect();
+	void UndateProcessList();
+	afx_msg void OnNMRClickListProc(NMHDR *pNMHDR, LRESULT *pResult);
+	CMenu m_Menu;
+	afx_msg void OnProctectProcess();
 };

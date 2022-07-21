@@ -12,6 +12,8 @@
 #include <Windows.h>
 #include <winsvc.h>
 #include <winioctl.h>
+#include <tlhelp32.h>
+#include <psapi.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -116,6 +118,9 @@ BEGIN_MESSAGE_MAP(CStartDriverDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_UNLOAD, &CStartDriverDlg::OnBnClickedBtnUnload)
 	ON_BN_CLICKED(IDC_BTN_TEST, &CStartDriverDlg::OnBnClickedBtnTest)
 	ON_BN_CLICKED(IDC_BTN_PROCTECT, &CStartDriverDlg::OnBnClickedBtnProctect)
+	ON_BN_CLICKED(IDC_BTN_CONNECT, &CStartDriverDlg::OnBnClickedBtnConnect)
+	ON_NOTIFY(NM_RCLICK, IDC_LIST_PROC, &CStartDriverDlg::OnNMRClickListProc)
+	ON_COMMAND(ID_1_2, &CStartDriverDlg::OnProctectProcess)
 END_MESSAGE_MAP()
 
 
@@ -158,9 +163,9 @@ BOOL CStartDriverDlg::OnInitDialog()
 
 	m_listctrl_proc.SetColumnWidth(0, 120);
 	m_listctrl_proc.SetColumnWidth(1, 80);
-	m_listctrl_proc.SetColumnWidth(2, 200);
-
-
+	m_listctrl_proc.SetColumnWidth(2, 400);
+	
+	m_Menu.LoadMenuW(IDR_PROCESS_MENU);
 	m_listctrl_proc.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -563,7 +568,8 @@ void CStartDriverDlg::OnBnClickedBtnTest()
 	// TODO: 在此添加控件通知处理程序代码
 
 	//TestDriver();
-	ConnectDriver(&m_hDevice);
+	//ConnectDriver(&m_hDevice);
+	UndateProcessList();
 
 }
 
@@ -575,7 +581,91 @@ void CStartDriverDlg::OnBnClickedBtnProctect()
 	// TODO: 传PID到R0保护目标进程
 	UpdateData(TRUE);
 	ULONG pid = _ttoi(m_csPid);
-	MessageBox(m_csPid);
-
 	DrvSend(m_hDevice, &pid, sizeof(ULONG));
+}
+
+
+void CStartDriverDlg::OnBnClickedBtnConnect()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	ConnectDriver(&m_hDevice);
+}
+
+
+void CStartDriverDlg::UndateProcessList()
+{
+	// TODO: 在此处添加实现代码.
+	m_listctrl_proc.DeleteAllItems();
+
+	HANDLE hSnapshot;
+	hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+	PROCESSENTRY32 pe32;
+	pe32.dwSize = sizeof(PROCESSENTRY32);
+	Process32First(hSnapshot, &pe32);
+
+	DWORD dwSize = 0;
+	HANDLE hProcess;
+	CString str;
+	TCHAR ExePath[MAX_PATH] = {};
+	int i = 0;
+	do
+	{
+		
+
+		m_listctrl_proc.InsertItem(i, pe32.szExeFile);
+		str.Format(_T("%d"), pe32.th32ProcessID);
+		m_listctrl_proc.SetItemData(i, pe32.th32ProcessID);
+		
+		m_listctrl_proc.SetItemText(i,1,str);
+		
+		hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID);
+		GetModuleFileNameEx(hProcess, 0, ExePath, sizeof(ExePath));
+
+
+		m_listctrl_proc.SetItemText(i, 2, ExePath);
+		
+		i++;
+	} while (Process32Next(hSnapshot, &pe32));
+
+	CloseHandle(hSnapshot);
+
+	UpdateData(FALSE);
+
+}
+
+
+void CStartDriverDlg::OnNMRClickListProc(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+
+	if (m_listctrl_proc.GetSelectionMark() != -1)
+	{
+		CMenu *nMenu = m_Menu.GetSubMenu(0);
+		POINT pos;
+		GetCursorPos(&pos);
+		nMenu->TrackPopupMenu(TPM_LEFTALIGN, pos.x, pos.y, this);
+	}
+
+
+}
+
+
+void CStartDriverDlg::OnProctectProcess()
+{
+	// TODO: 在此添加命令处理程序代码
+
+	CString str;
+	
+	DWORD_PTR pData = 0;
+	if (m_listctrl_proc.GetSelectionMark() != -1)
+	{
+		pData = m_listctrl_proc.GetItemData(m_listctrl_proc.GetSelectionMark());
+
+		str.Format(_T("%d"), pData);
+		MessageBox(str);
+	}
+
 }
